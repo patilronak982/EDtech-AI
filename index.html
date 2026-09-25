@@ -571,7 +571,7 @@
         function updateModeIndicator() {
             const indicator = document.getElementById('mode-indicator');
             if (apiKey) {
-                indicator.innerText = 'Live Gemini 1.5Mode';
+                indicator.innerText = 'Live Gemini Mode';
                 indicator.parentElement.style.background = 'rgba(99, 102, 241, 0.15)';
                 indicator.parentElement.style.color = '#a5b4fc';
             } else {
@@ -585,7 +585,6 @@
             currentTopic = topicName;
             document.getElementById('current-topic-heading').innerText = topicName;
             
-            // Highlight button
             document.querySelectorAll('.topic-btn').forEach(btn => {
                 btn.classList.remove('active');
                 if (btn.innerText.includes(topicName)) btn.classList.add('active');
@@ -611,23 +610,19 @@
             const userText = inputField.value.trim();
             if (!userText) return;
 
-            // Render User Bubble
             appendUserMessage(userText);
             inputField.value = '';
 
-            // Render Thinking Bubble
             const thinkingId = appendBotMessage('<em>Thinking about the best analogy for you...</em>');
 
             if (apiKey) {
-                // Call Live Google Gemini API
                 try {
                     const responseText = await callGeminiAPI(userText);
                     updateBotMessage(thinkingId, formatMarkdown(responseText));
                 } catch (err) {
-                    updateBotMessage(thinkingId, "⚠️ Failed to reach Gemini API. Please verify your API Key or try again later.");
+                    updateBotMessage(thinkingId, `⚠️ ${err.message}`);
                 }
             } else {
-                // Offline Fallback Response Logic
                 setTimeout(() => {
                     const matched = offlineKnowledgeBase[userText];
                     if (matched) {
@@ -651,9 +646,11 @@
             }
         }
 
-        // Gemini REST API Request Handler
+        // Gemini REST API Request Handler with Detailed Diagnostics
         async function callGeminiAPI(prompt) {
-            const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`;
+            const cleanKey = apiKey.trim();
+            const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${cleanKey}`;
+            
             const payload = {
                 contents: [{
                     parts: [{ text: `${SOCRATIC_SYSTEM_PROMPT}\n\nStudent Question: ${prompt}` }]
@@ -666,7 +663,12 @@
                 body: JSON.stringify(payload)
             });
 
-            if (!res.ok) throw new Error(`API Error: ${res.status}`);
+            if (!res.ok) {
+                const errorData = await res.json().catch(() => ({}));
+                const detailedMsg = errorData.error ? errorData.error.message : `HTTP ${res.status}`;
+                throw new Error(`Google API Error (${res.status}): ${detailedMsg}`);
+            }
+
             const data = await res.json();
             return data.candidates[0].content.parts[0].text;
         }
